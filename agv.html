@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simulation de Jobshop Flexible</title>
+    <style>
+        .machine {
+            width: 60px;
+            height: 60px;
+            background-color: lightblue;
+            position: absolute;
+            border: 1px solid #000;
+            text-align: center;
+            line-height: 60px;
+            font-weight: bold;
+        }
+
+        .counter {
+            font-size: 12px;
+        }
+
+        /* Définir différentes classes de couleur pour les AGVs */
+        .agv {
+            width: 20px;
+            height: 20px;
+            position: absolute;
+            text-align: center;
+            line-height: 20px;
+            border-radius: 50%;
+        }
+
+        .agv-1 { background-color: blue; }
+        .agv-2 { background-color: green; }
+        .agv-3 { background-color: red; }
+        .agv-4 { background-color: yellow; }
+        .agv-5 { background-color: purple; }
+        .agv-6 { background-color: orange; }
+
+        .piece {
+            width: 10px;
+            height: 10px;
+            background-color: yellow;
+            position: absolute;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .goal-reached-indicator {
+            width: 10px;
+            height: 10px;
+            background-color: black;
+            position: absolute;
+            border-radius: 50%;
+        }
+
+        #depot-agv {
+            width: 100px;
+            height: 50px;
+            background-color: green;
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            border: 1px solid #000;
+            text-align: center;
+            line-height: 50px;
+        }
+
+        /* Ajouter un style pour la zone de produits finis */
+        #produits-finis {
+            width: 200px;
+            height: 200px;
+            background-color: lightgreen;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            border: 1px solid #000;
+        }
+
+        #produits-finis-counter {
+            font-size: 18px;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        /* Blinking red animation for machines */
+        .blink-red {
+            animation: blink-red-animation 1s linear infinite;
+        }
+
+        @keyframes blink-red-animation {
+            0% {
+                background-color: red;
+            }
+            50% {
+                background-color: transparent;
+            }
+            100% {
+                background-color: red;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="depot-agv">Dépôt AGV</div>
+    
+    <!-- Ajouter la zone des produits finis avec un compteur -->
+    <div id="produits-finis">
+        <div id="produits-finis-counter">0</div>
+    </div>
+
+    <script>
+        function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function createMachine(id) {
+            var machine = document.createElement('div');
+            machine.className = 'machine';
+            machine.textContent = 'M' + id;
+            
+            var counter = document.createElement('div');
+            counter.className = 'counter';
+            counter.textContent = '0/' + getRandomInt(5, 10);
+            machine.appendChild(counter);
+
+            machine.objectivesReached = 0;
+
+            var goalIndicator = document.createElement('div');
+            goalIndicator.className = 'goal-reached-indicator';
+            goalIndicator.style.display = 'none';
+            machine.appendChild(goalIndicator);
+
+            var x = getRandomInt(50, window.innerWidth - 110);
+            var y = getRandomInt(50, window.innerHeight - 110);
+            machine.style.left = `${x}px`;
+            machine.style.top = `${y}px`;
+            document.body.appendChild(machine);
+            return machine;
+        }
+
+        function createAGV(id) {
+            var agv = document.createElement('div');
+            
+            agv.className = `agv agv-${id}`;
+            
+            agv.textContent = 'AGV ' + id;
+            agv.style.left = '10px';
+            agv.style.top = '540px';
+            agv.speed = getRandomInt(1, 5);
+
+            function moveAGV() {
+                var piece = createPiece();
+                agv.appendChild(piece);
+
+                const availableMachines = machines.filter((machine) => {
+                    let counter = machine.querySelector('.counter');
+                    let [currentCount, goal] = counter.textContent.split('/');
+                    currentCount = parseInt(currentCount);
+                    return currentCount < goal;
+                });
+
+                if (availableMachines.length === 0) {
+                    const depot = document.getElementById('depot-agv');
+                    const depotX = parseInt(depot.style.left);
+                    const depotY = parseInt(depot.style.bottom) + depot.offsetHeight;
+
+                    animateMovement(agv, depotX, depotY, agv.speed, () => {
+                        agv.removeChild(piece);
+                        setTimeout(() => {
+                            moveAGV();
+                        }, 1000);
+                    });
+                } else {
+                    const machineIndex = getRandomInt(0, availableMachines.length - 1);
+                    const machine = availableMachines[machineIndex];
+                    const targetX = parseInt(machine.style.left);
+                    const targetY = parseInt(machine.style.top);
+
+                    animateMovement(agv, targetX, targetY, agv.speed, () => {
+                        let counter = machine.querySelector('.counter');
+                        let [currentCount, goal] = counter.textContent.split('/');
+                        currentCount = parseInt(currentCount) + 1;
+                        counter.textContent = `${currentCount}/${goal}`;
+
+                        if (currentCount >= goal) {
+                            machine.classList.add('blink-red');
+                            let goalIndicator = machine.querySelector('.goal-reached-indicator');
+                            goalIndicator.style.display = 'block';
+                            setTimeout(() => {
+                                machine.classList.remove('blink-red');
+                                goalIndicator.style.display = 'none';
+                                counter.textContent = '0/' + goal;
+                                machine.objectivesReached++;
+                                counter.textContent = `0/${goal} (${machine.objectivesReached})`;
+                                
+                                // Déplacer la pièce terminée vers la zone de produits finis
+                                agv.removeChild(piece);
+                                movePieceToFinishedProducts(piece);
+                            }, 3000);
+                        }
+
+                        const depot = document.getElementById('depot-agv');
+                        const depotX = parseInt(depot.style.left);
+                        const depotY = parseInt(depot.style.bottom) + depot.offsetHeight;
+
+                        // Ajout d'un léger délai avant de déplacer l'AGV
+                        setTimeout(() => {
+                            animateMovement(agv, depotX, depotY, agv.speed, () => {
+                                agv.removeChild(piece);
+                                setTimeout(() => {
+                                    moveAGV();
+                                }, 1000);
+                            });
+                        }, getRandomInt(500, 1500));
+                    });
+                }
+            }
+
+            moveAGV();
+            document.body.appendChild(agv);
+            return agv;
+        }
+
+        function createPiece() {
+            var piece = document.createElement('div');
+            piece.className = 'piece';
+            return piece;
+        }
+
+        function animateMovement(element, targetX, targetY, speed, onCompletion) {
+            const startX = parseInt(element.style.left, 10);
+            const startY = parseInt(element.style.top, 10);
+            const distanceX = targetX - startX;
+            const distanceY = targetY - startY;
+            const duration = 5000 / speed;
+            let startTime = null;
+
+            function updatePosition(currentTime) {
+                if (!startTime) startTime = currentTime;
+                const elapsedTime = currentTime - startTime;
+                const fraction = elapsedTime / duration;
+
+                if (fraction < 1) {
+                    element.style.left = `${startX + distanceX * fraction}px`;
+                    element.style.top = `${startY + distanceY * fraction}px`;
+                    requestAnimationFrame(updatePosition);
+                } else {
+                    element.style.left = `${targetX}px`;
+                    element.style.top = `${targetY}px`;
+                    if (onCompletion) onCompletion();
+                }
+            }
+
+            requestAnimationFrame(updatePosition);
+        }
+
+        function movePieceToFinishedProducts(piece) {
+            const produitsFinis = document.getElementById('produits-finis');
+            produitsFinis.appendChild(piece);
+
+            // Mettre à jour le compteur de produits finis
+            let produitsFinisCounter = document.getElementById('produits-finis-counter');
+            let currentCount = parseInt(produitsFinisCounter.textContent);
+            currentCount++;
+            produitsFinisCounter.textContent = currentCount;
+        }
+
+        const numMachines = getRandomInt(3, 6);
+        const machines = [];
+        const agvs = [];
+
+        for (let i = 0; i < numMachines; i++) {
+            machines.push(createMachine(i + 1));
+        }
+
+        for (let j = 0; j < numMachines; j++) {
+            const agv = createAGV(j + 1);
+            agvs.push(agv);
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
